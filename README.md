@@ -8,4 +8,4 @@ This repository implements a full edge-feasible ECG arrhythmia classification pi
 2. Install dependencies: `pip install -r requirements.txt`.
 3. Run the full pipeline: `bash scripts/run_all.sh`.
 
-See `CODEX_IMPLEMENTATION.md` for detailed design goals.
+See `IMPLEMENTATION.md` for detailed design goals.
