@@ -23,7 +23,7 @@ We will implement an **edge-feasible single‑lead ECG arrhythmia classifier** a
 
 ---
 
-## 1) Repository structure (Codex must create exactly this)
+## 1) Repository structure (must create exactly this)
 
 ```
 ecg-edge-robustness/
