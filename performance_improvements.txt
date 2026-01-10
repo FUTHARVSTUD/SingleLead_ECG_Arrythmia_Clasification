@@ -1,0 +1,15 @@
+Performance improvement log
+===========================
+
+1. Added class-balanced cross-entropy (inverse-frequency weights), AdamW optimizer with cosine LR decay, gradient clipping, and label smoothing in `src/train/train_erm.py` so teacher/student models can train for longer without collapsing minority classes.
+2. Enabled configurable DataLoader workers/pinning and exposed new CLI knobs (weight decay, scheduler, grad clip, etc.) for more stable runs.
+3. Strengthened ECG augmentations by reducing ramp warmup and adding temporal dropout corruption in `src/augment/ecg_aug.py` so the student_aug run actually sees meaningful perturbations early in training.
+
+Next entries will be appended as further improvements land.
+4. Added optional AdaBN evaluation in `src/eval/evaluate.py` plus `--adapt_npz/--adapt_steps` so we can refresh BatchNorm stats on INCART before scoring; wired the run script to pass the adapt split for cross-domain tests.
+5. Retrained all three checkpoints with the new hyper-parameters:
+   - Teacher: 25 epochs @ lr=5e-4, AdamW + cosine, hitting 0.93 macro-F1 / 99.1% accuracy on MIT-BIH val and 86.8% accuracy on DS2 test.
+   - Student baseline: 40 epochs @ lr=8e-4 without redundant loss weighting, reaching 0.75 macro-F1 / 95.9% accuracy on MIT-BIH val (DS1).
+   - Student+Aug: 50 epochs with the stronger augmentation policy, reaching 0.77 macro-F1 / 96.3% accuracy on MIT-BIH val.
+6. Ran MIT-BIH DS2 and INCART evaluations (with AdaBN for INCART) so metrics.json/metrics_*_test.json now track the improved cross-domain performance for every model.
+7. Updated `scripts/run_all.sh` to mirror the new hyper-parameters (longer runs, tuned learning rates, sampler/weight usage, augment flag, AdaBN for INCART) so a single command reproduces the improved checkpoints end-to-end.

@@ -23,6 +23,19 @@ def build_model(name: str, num_classes: int):
     raise ValueError(f"Unknown model '{name}'")
 
 
+def adapt_batchnorm(model: torch.nn.Module, npz_path: str, batch_size: int, device: torch.device, steps: int):
+    adapt_dataset = NpzDataset(npz_path)
+    loader = DataLoader(adapt_dataset, batch_size=batch_size, shuffle=True)
+    model.train()
+    with torch.no_grad():
+        for step, (batch_x, _) in enumerate(loader):
+            batch_x = batch_x.to(device)
+            model(batch_x)
+            if steps > 0 and (step + 1) >= steps:
+                break
+    model.eval()
+
+
 def evaluate(args: argparse.Namespace):
     dataset = NpzDataset(args.npz)
     loader = DataLoader(dataset, batch_size=args.batch, shuffle=False)
@@ -33,6 +46,9 @@ def evaluate(args: argparse.Namespace):
     model.load_state_dict(state_dict)
     model.to(device)
     model.eval()
+
+    if args.adapt_npz:
+        adapt_batchnorm(model, args.adapt_npz, args.batch, device, args.adapt_steps)
 
     preds = []
     targets = []
@@ -47,6 +63,7 @@ def evaluate(args: argparse.Namespace):
     y_true = torch.cat(targets).numpy()
     metrics = classification_metrics(y_true, y_pred)
     metrics["accuracy"] = float((y_pred == y_true).mean())
+    metrics["bn_adapted"] = bool(args.adapt_npz)
     if args.out_json:
         save_metrics(metrics, Path(args.out_json))
     print(json.dumps(metrics, indent=2))
@@ -59,6 +76,8 @@ def main():
     parser.add_argument("--npz", type=str, required=True)
     parser.add_argument("--batch", type=int, default=256)
     parser.add_argument("--out_json", type=str, default=None)
+    parser.add_argument("--adapt_npz", type=str, default=None, help="Optional NPZ split for AdaBN")
+    parser.add_argument("--adapt_steps", type=int, default=-1, help="Limit AdaBN batches (-1 for all)")
     args = parser.parse_args()
     evaluate(args)
 

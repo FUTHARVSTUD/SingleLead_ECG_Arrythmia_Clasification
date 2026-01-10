@@ -7,7 +7,7 @@ import torch
 
 
 class RampScheduler:
-    def __init__(self, warmup: int = 5, mid: int = 10):
+    def __init__(self, warmup: int = 3, mid: int = 8):
         self.warmup = warmup
         self.mid = mid
         self.epoch = 0
@@ -51,6 +51,8 @@ class ECGAugmentor:
             y = self._amplitude_scale(y, strength)
         if torch.rand(1).item() < 0.5:
             y = self._time_shift(y, strength)
+        if torch.rand(1).item() < 0.4:
+            y = self._temporal_dropout(y, strength)
         return y
 
     def _baseline_wander(self, x: torch.Tensor, std: torch.Tensor, strength: float):
@@ -81,6 +83,15 @@ class ECGAugmentor:
         max_shift = max(1, int(x.shape[-1] * 0.02 * strength))
         shift = torch.randint(-max_shift, max_shift + 1, (1,)).item()
         return torch.roll(x, shifts=shift, dims=-1)
+
+    def _temporal_dropout(self, x: torch.Tensor, strength: float):
+        length = x.shape[-1]
+        max_width = max(1, int(length * 0.05 * strength))
+        width = torch.randint(1, max_width + 1, (1,)).item()
+        start = torch.randint(0, max(1, length - width + 1), (1,)).item()
+        end = min(length, start + width)
+        x[..., start:end] = 0
+        return x
 
 
 def augment_factory(sample_rate: int = 250) -> ECGAugmentor:

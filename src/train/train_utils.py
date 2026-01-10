@@ -31,6 +31,15 @@ def build_sampler(labels: torch.Tensor) -> WeightedRandomSampler:
     return WeightedRandomSampler(sample_weights, num_samples=len(labels), replacement=True)
 
 
+def compute_class_weights(labels: torch.Tensor) -> torch.Tensor:
+    """Return normalized inverse-frequency weights for each class."""
+    counts = torch.bincount(labels, minlength=int(labels.max().item() + 1)).float()
+    counts = counts.clamp(min=1.0)
+    weights = 1.0 / torch.sqrt(counts)
+    weights /= weights.mean()
+    return weights
+
+
 def save_checkpoint(model: torch.nn.Module, path: Path):
     path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), path)
