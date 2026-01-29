@@ -1,6 +1,6 @@
 # ECG Edge Robustness
 
-This repository implements a full edge-feasible ECG arrhythmia classification pipeline following the Codex specification. It includes data preprocessing for MIT-BIH and INCART, compact and reference neural network models, augmentation-aware training, evaluation utilities, and tooling to check datasets and deployment suitability.
+This repository implements a full edge-feasible ECG arrhythmia classification pipeline. It includes data preprocessing for MIT-BIH and INCART, compact and reference neural network models, augmentation-aware training, evaluation utilities, and tooling to check datasets and deployment suitability.
 
 ## Quick start
 
