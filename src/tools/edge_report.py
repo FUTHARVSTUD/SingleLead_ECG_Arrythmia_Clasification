@@ -10,12 +10,12 @@ from src.models.resnet1d import resnet1d_teacher
 from src.models.tinydscnn1d import tinydscnn1d_student
 
 
-def build_model(name: str, num_classes: int = 5):
+def build_model(name: str, num_classes: int = 5, in_channels: int = 1):
     name = name.lower()
     if name == "teacher":
-        return resnet1d_teacher(num_classes=num_classes)
+        return resnet1d_teacher(num_classes=num_classes, in_channels=in_channels)
     if name in {"student", "student_aug"}:
-        return tinydscnn1d_student(num_classes=num_classes)
+        return tinydscnn1d_student(num_classes=num_classes, in_channels=in_channels)
     raise ValueError(f"Unknown model '{name}'")
 
 
@@ -42,7 +42,7 @@ def estimate_macs(model: nn.Module, input_len: int) -> float:
     for module in model.modules():
         if isinstance(module, nn.Conv1d):
             hooks.append(module.register_forward_hook(hook))
-    x = torch.zeros(1, 1, input_len)
+    x = torch.zeros(1, model.stem[0].in_channels, input_len)
     model.eval()
     with torch.no_grad():
         model(x)
@@ -55,9 +55,10 @@ def main():
     parser = argparse.ArgumentParser(description="Edge readiness report for ECG models")
     parser.add_argument("--model", type=str, required=True, choices=["teacher", "student", "student_aug"])
     parser.add_argument("--input_len", type=int, default=256)
+    parser.add_argument("--channels", type=int, default=1)
     args = parser.parse_args()
 
-    model = build_model(args.model)
+    model = build_model(args.model, in_channels=args.channels)
     params = param_count(model)
     macs = estimate_macs(model, args.input_len)
     size_fp32_kb = params * 4 / 1024

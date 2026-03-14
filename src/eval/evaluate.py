@@ -14,12 +14,12 @@ from src.models.tinydscnn1d import tinydscnn1d_student
 from src.train.train_utils import get_device, save_metrics
 
 
-def build_model(name: str, num_classes: int):
+def build_model(name: str, num_classes: int, in_channels: int = 1):
     name = name.lower()
     if name == "teacher":
-        return resnet1d_teacher(num_classes=num_classes)
+        return resnet1d_teacher(num_classes=num_classes, in_channels=in_channels)
     if name in {"student", "student_aug"}:
-        return tinydscnn1d_student(num_classes=num_classes)
+        return tinydscnn1d_student(num_classes=num_classes, in_channels=in_channels)
     raise ValueError(f"Unknown model '{name}'")
 
 
@@ -27,7 +27,7 @@ def evaluate(args: argparse.Namespace):
     dataset = NpzDataset(args.npz)
     loader = DataLoader(dataset, batch_size=args.batch, shuffle=False)
     device = get_device()
-    model = build_model(args.model, dataset.num_classes)
+    model = build_model(args.model, dataset.num_classes, dataset.in_channels)
     ckpt_path = Path(args.ckpt)
     state_dict = torch.load(ckpt_path, map_location="cpu")
     model.load_state_dict(state_dict)

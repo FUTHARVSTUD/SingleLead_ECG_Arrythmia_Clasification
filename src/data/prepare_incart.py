@@ -16,6 +16,44 @@ CHANNEL_PREFERENCE = ("II", "MLII", "V1", "V2")
 DEFAULT_PN_DIR = "incartdb/1.0.0"
 
 
+def _parse_class_list(value: str) -> List[int]:
+    if not value:
+        return []
+    classes: List[int] = []
+    for token in value.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        classes.append(int(token))
+    return classes
+
+
+def _augment_minority(
+    x: np.ndarray,
+    y: np.ndarray,
+    class_ids: List[int],
+    factor: int,
+    noise_scale: float,
+) -> Tuple[np.ndarray, np.ndarray]:
+    if factor <= 0 or not class_ids or len(x) == 0:
+        return x, y
+    rng = np.random.default_rng(0)
+    augmented = [x]
+    targets = [y]
+    for cls in class_ids:
+        idx = np.where(y == cls)[0]
+        if len(idx) == 0:
+            continue
+        samples = x[idx]
+        for _ in range(factor):
+            noise = rng.normal(loc=0.0, scale=noise_scale, size=samples.shape).astype(np.float32)
+            augmented.append(samples + noise)
+            targets.append(np.full(len(samples), cls, dtype=np.int64))
+    if len(augmented) == 1:
+        return x, y
+    return np.concatenate(augmented, axis=0), np.concatenate(targets, axis=0)
+
+
 def _pick_channel(sig_names: Sequence[str]) -> int:
     lookup = {name.upper(): idx for idx, name in enumerate(sig_names)}
     for name in CHANNEL_PREFERENCE:
@@ -61,8 +99,10 @@ def _collect(record: str, args: argparse.Namespace) -> Tuple[np.ndarray, np.ndar
         ann_samples, symbols, signal_len=len(lead), window_len=args.window_len
     )
     if len(ann_samples) == 0:
+        if args.context_beats > 1:
+            return np.zeros((0, args.context_beats, args.window_len), dtype=np.float32), np.zeros((0,), dtype=np.int64)
         return np.zeros((0, args.window_len), dtype=np.float32), np.zeros((0,), dtype=np.int64)
-    windows = extract_windows(lead, ann_samples, args.window_len)
+    windows = extract_windows(lead, ann_samples, args.window_len, context_beats=args.context_beats)
     samples = []
     labels = []
     for win, symbol in zip(windows, symbols):
@@ -72,6 +112,8 @@ def _collect(record: str, args: argparse.Namespace) -> Tuple[np.ndarray, np.ndar
         samples.append(win)
         labels.append(label)
     if not samples:
+        if args.context_beats > 1:
+            return np.zeros((0, args.context_beats, args.window_len), dtype=np.float32), np.zeros((0,), dtype=np.int64)
         return np.zeros((0, args.window_len), dtype=np.float32), np.zeros((0,), dtype=np.int64)
     return np.stack(samples).astype(np.float32), np.asarray(labels, dtype=np.int64)
 
@@ -82,13 +124,38 @@ def main():
     parser.add_argument("--out_dir", type=str, required=True)
     parser.add_argument("--target_fs", type=int, default=250)
     parser.add_argument("--window_len", type=int, default=256)
+    parser.add_argument("--context_beats", type=int, default=1)
     parser.add_argument("--adapt_ratio", type=float, default=0.6)
     parser.add_argument("--seed", type=int, default=123)
+    parser.add_argument(
+        "--adapt_val_ratio",
+        type=float,
+        default=0.1,
+        help="Portion of the adapt split reserved as validation for fine-tuning",
+    )
     parser.add_argument(
         "--pn_dir",
         type=str,
         default=DEFAULT_PN_DIR,
         help="PhysioNet directory for INCART annotations when local .atr files are absent",
+    )
+    parser.add_argument(
+        "--minority_classes",
+        type=str,
+        default="",
+        help="Class indices to augment within INCART adapt_train",
+    )
+    parser.add_argument(
+        "--minority_factor",
+        type=int,
+        default=0,
+        help="Number of noisy copies per minority-class beat in adapt_train",
+    )
+    parser.add_argument(
+        "--minority_noise",
+        type=float,
+        default=0.01,
+        help="Gaussian noise scale used for INCART minority augmentation",
     )
     args = parser.parse_args()
 
@@ -123,13 +190,40 @@ def main():
     adapt_x, adapt_y = _aggregate(adapt_records)
     test_x, test_y = _aggregate(test_records)
 
+    def _split_samples(x: np.ndarray, y: np.ndarray, val_ratio: float, seed: int):
+        if len(x) == 0 or val_ratio <= 0:
+            return (x, y), (np.zeros((0, x.shape[-1]), dtype=x.dtype), np.zeros((0,), dtype=y.dtype))
+        rng = np.random.default_rng(seed)
+        idx = np.arange(len(x))
+        rng.shuffle(idx)
+        val_size = max(1, int(len(x) * val_ratio))
+        if val_size >= len(x):
+            val_size = len(x) // 2
+        val_idx = idx[:val_size]
+        train_idx = idx[val_size:]
+        return (x[train_idx], y[train_idx]), (x[val_idx], y[val_idx])
+
+    (adapt_train_x, adapt_train_y), (adapt_val_x, adapt_val_y) = _split_samples(
+        adapt_x, adapt_y, args.adapt_val_ratio, args.seed
+    )
+
+    minority_classes = _parse_class_list(args.minority_classes)
+    if minority_classes and args.minority_factor > 0:
+        adapt_train_x, adapt_train_y = _augment_minority(
+            adapt_train_x, adapt_train_y, minority_classes, args.minority_factor, args.minority_noise
+        )
+
     def _save(path: Path, x: np.ndarray, y: np.ndarray):
         np.savez_compressed(path, x=x, y=y)
         return {"path": str(path), "examples": len(x)}
 
     summary = {
         "adapt": _save(Path(args.out_dir) / "adapt.npz", adapt_x, adapt_y),
+        "adapt_train": _save(Path(args.out_dir) / "adapt_train.npz", adapt_train_x, adapt_train_y),
+        "adapt_val": _save(Path(args.out_dir) / "adapt_val.npz", adapt_val_x, adapt_val_y),
         "test": _save(Path(args.out_dir) / "test.npz", test_x, test_y),
+        "minority_classes": minority_classes,
+        "minority_factor": args.minority_factor,
     }
     (Path(args.out_dir) / "summary.json").write_text(json.dumps(summary, indent=2))
     print(json.dumps(summary, indent=2))

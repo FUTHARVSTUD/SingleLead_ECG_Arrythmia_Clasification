@@ -56,6 +56,57 @@ MITBIH_DS2: List[str] = [
 
 MITBIH_RECORDS = sorted(set(MITBIH_DS1 + MITBIH_DS2))
 
+# Cross-patient "DSC" split (Kiranyaz et al.) used for inter-patient evaluation.
+MITBIH_DSC_TRAIN: List[str] = [
+    "101",
+    "106",
+    "108",
+    "109",
+    "112",
+    "114",
+    "115",
+    "116",
+    "118",
+    "119",
+    "122",
+    "124",
+    "201",
+    "203",
+    "205",
+    "207",
+    "208",
+    "209",
+    "215",
+    "220",
+    "221",
+    "223",
+    "230",
+]
+
+MITBIH_DSC_TEST: List[str] = [
+    "100",
+    "103",
+    "105",
+    "111",
+    "113",
+    "117",
+    "121",
+    "123",
+    "200",
+    "202",
+    "210",
+    "212",
+    "213",
+    "214",
+    "219",
+    "222",
+    "228",
+    "231",
+    "232",
+    "233",
+    "234",
+]
+
 # INCART uses a continuous recording per patient. We randomly split by record index
 # when writing processed files; exact split happens during preprocessing.
 INCART_ADAPT_RATIO = 0.6  # portion used as unlabeled adaptation set (AdaBN)
@@ -76,5 +127,7 @@ def describe() -> Dict[str, List[str]]:
     return {
         "mitbih_ds1": MITBIH_DS1,
         "mitbih_ds2": MITBIH_DS2,
+        "mitbih_dsc_train": MITBIH_DSC_TRAIN,
+        "mitbih_dsc_test": MITBIH_DSC_TEST,
         "incart_all": dataset_records("incart"),
     }

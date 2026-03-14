@@ -57,11 +57,50 @@ def resample_signal(sig: np.ndarray, orig_fs: int, target_fs: int) -> np.ndarray
     return signal.resample_poly(sig, up=up, down=down).astype(np.float32)
 
 
-def extract_windows(sig: np.ndarray, annotation_samples: np.ndarray, window_len: int) -> np.ndarray:
-    half = window_len // 2
-    padded = np.pad(sig, (half, half), mode="constant")
-    centers = annotation_samples + half
-    windows = [padded[c - half : c + half] for c in centers]
+def extract_windows(
+    sig: np.ndarray,
+    annotation_samples: np.ndarray,
+    window_len: int,
+    context_beats: int = 1,
+) -> np.ndarray:
+    def _single(center: int) -> np.ndarray:
+        half = window_len // 2
+        start = center - half
+        end = start + window_len
+        pad_left = max(0, -start)
+        pad_right = max(0, end - len(sig))
+        start = max(0, start)
+        end = min(len(sig), end)
+        segment = sig[start:end]
+        if pad_left or pad_right:
+            segment = np.pad(segment, (pad_left, pad_right), mode="constant")
+        if segment.shape[0] != window_len:
+            segment = np.pad(segment, (0, window_len - segment.shape[0]))
+        return segment.astype(np.float32)
+
+    if context_beats <= 1:
+        windows = [_single(sample) for sample in annotation_samples]
+        return np.stack(windows, axis=0)
+
+    pre = context_beats // 2
+    post = context_beats - pre - 1
+    total = pre + 1 + post
+    windows = []
+    for idx in range(len(annotation_samples)):
+        start = max(0, idx - pre)
+        end = min(len(annotation_samples), idx + post + 1)
+        segments = []
+        for offset in range(start, end):
+            segments.append(_single(annotation_samples[offset]))
+        # pad if needed at beginning or end
+        while len(segments) < total:
+            if len(segments) < pre + 1:
+                segments.insert(0, np.zeros(window_len, dtype=np.float32))
+            else:
+                segments.append(np.zeros(window_len, dtype=np.float32))
+        if len(segments) > total:
+            segments = segments[:total]
+        windows.append(np.stack(segments, axis=0))
     return np.stack(windows, axis=0)
 
 

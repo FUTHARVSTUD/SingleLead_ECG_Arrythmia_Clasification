@@ -54,3 +54,17 @@ class EarlyStopping:
             return False
         self.counter += 1
         return self.counter >= self.patience
+
+
+def coral_loss(source: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    if source.ndim != 2 or target.ndim != 2:
+        raise ValueError("CORAL expects 2D feature tensors")
+    if source.shape[0] < 2 or target.shape[0] < 2:
+        return torch.tensor(0.0, device=source.device, dtype=source.dtype)
+    source = source - source.mean(dim=0, keepdim=True)
+    target = target - target.mean(dim=0, keepdim=True)
+    cs = (source.T @ source) / (source.shape[0] - 1)
+    ct = (target.T @ target) / (target.shape[0] - 1)
+    loss = torch.mean((cs - ct) ** 2)
+    d = source.shape[1]
+    return loss / (4 * (d**2))

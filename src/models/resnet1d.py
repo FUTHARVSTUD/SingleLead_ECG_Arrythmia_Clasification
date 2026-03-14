@@ -52,7 +52,8 @@ class ResNet1D(nn.Module):
             stage = self._make_layer(channels, out_channels, num_blocks, stride)
             self.stages.append(stage)
             channels = out_channels
-        self.head = nn.Sequential(nn.AdaptiveAvgPool1d(1), nn.Flatten(), nn.Linear(channels, num_classes))
+        self.avgpool = nn.AdaptiveAvgPool1d(1)
+        self.fc = nn.Linear(channels, num_classes)
 
     def _make_layer(self, in_channels: int, out_channels: int, blocks: int, stride: int) -> nn.Sequential:
         modules = [ResidualBlock(in_channels, out_channels, stride=stride)]
@@ -64,8 +65,23 @@ class ResNet1D(nn.Module):
         x = self.stem(x)
         for stage in self.stages:
             x = stage(x)
-        x = self.head(x)
-        return x
+        pooled = self.avgpool(x)
+        flat = torch.flatten(pooled, 1)
+        logits = self.fc(flat)
+        return logits
+
+    def forward_features(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.stem(x)
+        for stage in self.stages:
+            x = stage(x)
+        pooled = self.avgpool(x)
+        flat = torch.flatten(pooled, 1)
+        return flat
+
+    def forward_with_features(self, x: torch.Tensor):
+        feats = self.forward_features(x)
+        logits = self.fc(feats)
+        return logits, feats
 
 
 def resnet1d_teacher(**kwargs) -> ResNet1D:
